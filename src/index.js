@@ -1,24 +1,19 @@
-// Require ThreeJS and any necessary extensions
-global.THREE = require('three');
-require('three/examples/js/curves/NURBSUtils');
-require('three/examples/js/curves/NURBSCurve');
+import * as THREE from 'three';
+import { NURBSCurve } from 'three/examples/jsm/curves/NURBSCurve.js';
+
+import fragment from './wire.frag';
+import vertex from './wire.vert';
 
 // Include dat.gui sliders
-const dat = require('dat.gui/build/dat.gui.js');
-const gui = new dat.GUI({ load: require('./gui.json'), preset: 'Sleek' });
+import dat from 'dat.gui';
+import guiSettings from './gui.json';
+const gui = new dat.GUI({ load: guiSettings, preset: 'Sleek' });
 
 // Grab some nice color palettes
-const palettes = require('nice-color-palettes');
-
-//  glslify is used for including GLSL shader code
-const glslify = require('glslify');
-const path = require('path');
+import palettes from 'nice-color-palettes';
 
 // our geometry helper functions
-const {
-  addBarycentricCoordinates,
-  unindexBufferGeometry
-} = require('./geom');
+import { addBarycentricCoordinates } from './geom';
 
 // grab a default palette
 let palette = palettes[13].slice();
@@ -32,7 +27,7 @@ canvas.style.background = background;
 // create an anti-aliased ThreeJS WebGL renderer
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
-  canvas
+  canvas,
 });
 
 // Enable Alpha to Coverage for alpha cutouts + depth test
@@ -54,11 +49,12 @@ const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
 const material = new THREE.ShaderMaterial({
   extensions: {
     // needed for anti-alias smoothstep, aastep()
-    derivatives: true
+    derivatives: true,
   },
   transparent: true,
   side: THREE.DoubleSide,
-  uniforms: { // some parameters for the shader
+  uniforms: {
+    // some parameters for the shader
     time: { value: 0 },
     fill: { value: new THREE.Color(palette[0]) },
     stroke: { value: new THREE.Color(palette[1]) },
@@ -76,15 +72,14 @@ const material = new THREE.ShaderMaterial({
     dashAnimate: { value: false },
     squeeze: { value: false },
     squeezeMin: { value: 0.1 },
-    squeezeMax: { value: 1.0 }
+    squeezeMax: { value: 1.0 },
   },
-  // use glslify here to bring in the GLSL code
-  fragmentShader: glslify(path.resolve(__dirname, 'wire.frag')),
-  vertexShader: glslify(path.resolve(__dirname, 'wire.vert'))
+  fragmentShader: fragment,
+  vertexShader: vertex,
 });
 
 // add the mesh with an empty geometry for now, we will change it later
-const mesh = new THREE.Mesh(new THREE.Geometry(), material);
+const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
 scene.add(mesh);
 
 const clock = new THREE.Clock();
@@ -93,28 +88,30 @@ const clock = new THREE.Clock();
 createGeometry();
 setupGUI();
 resize();
-renderer.animate(update);
 canvas.style.visibility = '';
 update();
 draw();
 
-function update () {
+function update() {
   // orbit the camera and update shader time
   const time = clock.getElapsedTime();
   const radius = 4;
-  const angle = time * 2.5 * Math.PI / 180;
+  const angle = (time * 2.5 * Math.PI) / 180;
   camera.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
   camera.lookAt(new THREE.Vector3());
   mesh.material.uniforms.time.value = time;
   draw();
+
+  // Call tick again on the next frame
+  window.requestAnimationFrame(update);
 }
 
-function draw () {
+function draw() {
   // render a single frame
   renderer.render(scene, camera);
 }
 
-function resize (width = window.innerWidth, height = window.innerHeight, pixelRatio = window.devicePixelRatio) {
+function resize(width = window.innerWidth, height = window.innerHeight, pixelRatio = window.devicePixelRatio) {
   // handle window resize
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(width, height);
@@ -123,7 +120,7 @@ function resize (width = window.innerWidth, height = window.innerHeight, pixelRa
   draw();
 }
 
-function createGeometry (type = 'TorusKnot', edgeRemoval = true) {
+function createGeometry(type = 'TorusKnot', edgeRemoval = true) {
   // dispose the old geometry if we have one
   if (mesh.geometry) mesh.geometry.dispose();
 
@@ -132,37 +129,39 @@ function createGeometry (type = 'TorusKnot', edgeRemoval = true) {
   let geometry;
   switch (type) {
     case 'TorusKnot':
-      geometry = new THREE.TorusKnotBufferGeometry(0.7, 0.3, 30, 4);
+      geometry = new THREE.TorusKnotGeometry(0.7, 0.3, 30, 4);
       geometry.rotateY(-Math.PI * 0.5);
       break;
     case 'Icosphere':
-      geometry = new THREE.IcosahedronBufferGeometry(1, 1);
+      geometry = new THREE.IcosahedronGeometry(1, 1);
       break;
     case 'Tube':
       const baseGeom = new THREE.IcosahedronGeometry(1, 0);
       const points = baseGeom.vertices;
       baseGeom.dispose();
       const curve = toSpline(points);
-      geometry = new THREE.TubeBufferGeometry(curve, 30, 0.3, 4, false);
+      geometry = new THREE.TubeGeometry(curve, 30, 0.3, 4, false);
       break;
     case 'Sphere':
-      geometry = new THREE.SphereBufferGeometry(1, 20, 10);
+      geometry = new THREE.SphereGeometry(1, 20, 10);
       break;
     case 'Torus':
-      geometry = new THREE.TorusBufferGeometry(1, 0.3, 8, 30);
+      geometry = new THREE.TorusGeometry(1, 0.3, 8, 30);
       break;
   }
 
   // the BufferGeometry needs to be un-indexed, then we can
   // add barycentric coordiantes for the wireframe effect
-  unindexBufferGeometry(geometry);
+  if (geometry.index) {
+    geometry = geometry.toNonIndexed();
+  }
   addBarycentricCoordinates(geometry, edgeRemoval);
 
   // set the new geometry on the mesh
   mesh.geometry = geometry;
 }
 
-function toSpline (points) {
+function toSpline(points) {
   // This helper function makes a smooth NURBS curve from a set of points
   const nurbsDegree = 3;
   const nurbsKnots = [];
@@ -174,10 +173,10 @@ function toSpline (points) {
     nurbsKnots.push(Math.max(Math.min(1, knot), 0));
     return new THREE.Vector4(p.x, p.y, p.z, 1);
   });
-  return new THREE.NURBSCurve(nurbsDegree, nurbsKnots, nurbsControlPoints);
+  return new NURBSCurve(nurbsDegree, nurbsKnots, nurbsControlPoints);
 }
 
-function saveScreenshot () {
+function saveScreenshot() {
   // force a specific output size
   const width = 2048;
   const height = 2048;
@@ -195,7 +194,7 @@ function saveScreenshot () {
   link.click();
 }
 
-function setupGUI () {
+function setupGUI() {
   // This function handles all the GUI sliders and updates
   const shader = gui.addFolder('Shader');
 
@@ -205,11 +204,11 @@ function setupGUI () {
     backgroundHex: background,
     saveScreenshot,
     fillHex: `#${mesh.material.uniforms.fill.value.getHexString()}`,
-    strokeHex: `#${mesh.material.uniforms.stroke.value.getHexString()}`
+    strokeHex: `#${mesh.material.uniforms.stroke.value.getHexString()}`,
   };
 
   // add all the uniforms into our gui data
-  Object.keys(mesh.material.uniforms).forEach(key => {
+  Object.keys(mesh.material.uniforms).forEach((key) => {
     const uniform = mesh.material.uniforms[key];
     if (typeof uniform.value === 'boolean' || typeof uniform.value === 'number') {
       guiData[key] = uniform.value;
@@ -237,7 +236,7 @@ function setupGUI () {
   };
 
   const updateUniforms = () => {
-    Object.keys(guiData).forEach(key => {
+    Object.keys(guiData).forEach((key) => {
       if (key in mesh.material.uniforms) {
         mesh.material.uniforms[key].value = guiData[key];
       }
@@ -275,13 +274,10 @@ function setupGUI () {
   effects.add(guiData, 'secondThickness', 0, 0.2).step(0.001).name('Dual Thick').onChange(updateUniforms);
 
   const geom = shader.addFolder('Geometry');
-  geom.add(guiData, 'name', [
-    'TorusKnot',
-    'Icosphere',
-    'Tube',
-    'Sphere',
-    'Torus'
-  ]).name('Geometry').onChange(updateGeom);
+  geom
+    .add(guiData, 'name', ['TorusKnot', 'Icosphere', 'Tube', 'Sphere', 'Torus'])
+    .name('Geometry')
+    .onChange(updateGeom);
   geom.add(guiData, 'edgeRemoval').name('Edge Removal').onChange(updateGeom);
 
   // close GUI for mobile devices

@@ -26,33 +26,34 @@ uniform float squeezeMax;
 uniform vec3 stroke;
 uniform vec3 fill;
 
-#pragma glslify: noise = require('glsl-noise/simplex/4d');
-#pragma glslify: PI = require('glsl-pi');
+#include "./noise/4d.glsl"
+
+#define PI (3.141592653589793)
 
 // This is like
-float aastep (float threshold, float dist) {
+float aastep(float threshold, float dist) {
   float afwidth = fwidth(dist) * 0.5;
   return smoothstep(threshold - afwidth, threshold + afwidth, dist);
 }
 
 // This function is not currently used, but it can be useful
 // to achieve a fixed width wireframe regardless of z-depth
-float computeScreenSpaceWireframe (vec3 barycentric, float lineWidth) {
+float computeScreenSpaceWireframe(vec3 barycentric, float lineWidth) {
   vec3 dist = fwidth(barycentric);
-  vec3 smoothed = smoothstep(dist * ((lineWidth * 0.5) - 0.5), dist * ((lineWidth * 0.5) + 0.5), barycentric);
+  vec3 smoothed = smoothstep(dist * (lineWidth * 0.5 - 0.5), dist * (lineWidth * 0.5 + 0.5), barycentric);
   return 1.0 - min(min(smoothed.x, smoothed.y), smoothed.z);
 }
 
 // This function returns the fragment color for our styled wireframe effect
 // based on the barycentric coordinates for this fragment
-vec4 getStyledWireframe (vec3 barycentric) {
+vec4 getStyledWireframe(vec3 barycentric) {
   // this will be our signed distance for the wireframe edge
   float d = min(min(barycentric.x, barycentric.y), barycentric.z);
 
   // we can modify the distance field to create interesting effects & masking
   float noiseOff = 0.0;
-  if (noiseA) noiseOff += noise(vec4(vPosition.xyz * 1.0, time * 0.35)) * 0.15;
-  if (noiseB) noiseOff += noise(vec4(vPosition.xyz * 80.0, time * 0.5)) * 0.12;
+  if (noiseA) noiseOff += snoise(vec4(vPosition.xyz * 1.0, time * 0.35)) * 0.15;
+  if (noiseB) noiseOff += snoise(vec4(vPosition.xyz * 80.0, time * 0.5)) * 0.12;
   d += noiseOff;
 
   // for dashed rendering, we can use this to get the 0 .. 1 value of the line length
@@ -66,7 +67,7 @@ vec4 getStyledWireframe (vec3 barycentric) {
 
   // if we want to shrink the thickness toward the center of the line segment
   if (squeeze) {
-    computedThickness *= mix(squeezeMin, squeezeMax, (1.0 - sin(positionAlong * PI)));
+    computedThickness *= mix(squeezeMin, squeezeMax, 1.0 - sin(positionAlong * PI));
   }
 
   // if we should create a dash pattern
@@ -88,7 +89,7 @@ vec4 getStyledWireframe (vec3 barycentric) {
     computedThickness *= 1.0 - aastep(dashLength, pattern);
   }
 
-  // compute the anti-aliased stroke edge  
+  // compute the anti-aliased stroke edge
   float edge = 1.0 - aastep(computedThickness, d);
 
   // now compute the final color of the mesh
@@ -113,6 +114,6 @@ vec4 getStyledWireframe (vec3 barycentric) {
   return outColor;
 }
 
-void main () {
+void main() {
   gl_FragColor = getStyledWireframe(vBarycentric);
 }
